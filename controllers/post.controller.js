@@ -1,24 +1,32 @@
 import prisma from "../lib/prisma.js"
-
+import jwt from "jsonwebtoken"
 export const getPosts = async (req, res) => {
 
     const query = req.query;
     
     try {
         const posts = await prisma.post.findMany({
-          where: {
-            city: query.city || undefined,
-            type: query.type || undefined,
-            property: query.property || undefined,
-            bedroom: parseInt(query.bedroom) || undefined,
-            price: {
-              gte: parseInt(query.minPrice) || undefined,
-              lte: parseInt(query.maxPrice) || undefined,
+            where: {
+              city: query.city && query.city !== "" ? query.city : undefined,
+              type: query.type && query.type !== "" ? query.type : undefined,
+              property: query.property && query.property !== "" ? query.property : undefined,
+              bedroom: query.bedroom ? parseInt(query.bedroom) : undefined,
+              price: {
+                gte: query.minPrice ? parseInt(query.minPrice) : 0, // Default to 0 if not provided
+                lte: query.maxPrice ? parseInt(query.maxPrice) : 100000, // Default to 100000 if not provided
+              },
             },
-          },
-        });
-        console.log(posts)
+          });
+          
+          
         res.status(200).json(posts)
+   
+        // console.log("before")
+        // setTimeout( () => {
+        //     console.log("after")
+            
+        // }, 3000);
+        
 
     }catch(err){
         console.log(err)
@@ -27,10 +35,11 @@ export const getPosts = async (req, res) => {
 }
 
 export const getPost = async (req, res) => {
-
+  
     const id = req.params.id;
 
     try{
+     
         const post = await prisma.post.findUnique({
             where:{id},
             include: {
@@ -44,7 +53,36 @@ export const getPost = async (req, res) => {
                 }
             }
         });
-        res.status(200).json(post)
+       
+        let userId;
+        const token = req.cookies?.token;
+
+        if (!token) {
+            userId = null;
+        }else {
+           jwt.verify(token, process.env.JWT_SECRET_KEY, async (err, payload) => {
+               if(err)
+               {
+                   userId = null;
+               }
+               else {
+                  userId = payload.id
+               }
+           })
+        }
+
+     
+        const saved = await prisma.savedPost.findUnique({
+            where: {
+                userId_postId: {
+                    postId:id, 
+                    userId
+                }
+            }
+        })
+
+
+        res.status(200).json({...post, isSaved: saved ? true : false})
 
     }catch(err){
         console.log(err)
